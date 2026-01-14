@@ -1,0 +1,24 @@
+export async function register() {
+  if (typeof window === 'undefined') {
+    // Server-side: patch localStorage if it exists but is broken
+    if (typeof globalThis.localStorage !== 'undefined') {
+      try {
+        // Test if localStorage is functional
+        globalThis.localStorage.getItem('test');
+      } catch (e) {
+        // localStorage exists but is broken, replace it with a working mock
+        const storage = new Map<string, string>();
+        (globalThis as any).localStorage = {
+          getItem: (key: string) => storage.get(key) ?? null,
+          setItem: (key: string, value: string) => storage.set(key, value),
+          removeItem: (key: string) => storage.delete(key),
+          clear: () => storage.clear(),
+          get length() {
+            return storage.size;
+          },
+          key: (index: number) => Array.from(storage.keys())[index] ?? null,
+        };
+      }
+    }
+  }
+}
