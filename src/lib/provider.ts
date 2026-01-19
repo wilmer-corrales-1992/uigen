@@ -1,17 +1,19 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import {
-  LanguageModelV1,
-  LanguageModelV1StreamPart,
-  LanguageModelV1Message,
+  LanguageModelV3,
+  LanguageModelV3StreamPart,
+  LanguageModelV3CallOptions,
+  LanguageModelV3Source,
 } from "@ai-sdk/provider";
 
 const MODEL = "claude-haiku-4-5";
 
-export class MockLanguageModel implements LanguageModelV1 {
-  readonly specificationVersion = "v1" as const;
+export class MockLanguageModel implements LanguageModelV3 {
+  readonly specificationVersion = "v3" as const;
   readonly provider = "mock";
   readonly modelId: string;
   readonly defaultObjectGenerationMode = "tool" as const;
+  readonly supportedUrls = {} as Record<string, RegExp[]>;
 
   constructor(modelId: string) {
     this.modelId = modelId;
@@ -21,7 +23,7 @@ export class MockLanguageModel implements LanguageModelV1 {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  private extractUserPrompt(messages: LanguageModelV1Message[]): string {
+  private extractUserPrompt(messages: Array<any>): string {
     // Find the last user message
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
@@ -41,7 +43,7 @@ export class MockLanguageModel implements LanguageModelV1 {
     return "";
   }
 
-  private getLastToolResult(messages: LanguageModelV1Message[]): any {
+  private getLastToolResult(messages: Array<any>): any {
     // Find the last tool message
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === "tool") {
@@ -55,9 +57,9 @@ export class MockLanguageModel implements LanguageModelV1 {
   }
 
   private async *generateMockStream(
-    messages: LanguageModelV1Message[],
+    messages: Array<any>,
     userPrompt: string
-  ): AsyncGenerator<LanguageModelV1StreamPart> {
+  ): AsyncGenerator<LanguageModelV3StreamPart> {
     // Count tool messages to determine which step we're on
     const toolMessageCount = messages.filter((m) => m.role === "tool").length;
 
@@ -78,16 +80,15 @@ export class MockLanguageModel implements LanguageModelV1 {
     if (toolMessageCount === 1) {
       const text = `I'll create a ${componentName} component for you.`;
       for (const char of text) {
-        yield { type: "text-delta", textDelta: char };
+        yield { type: "text-delta", id: "msg", delta: char };
         await this.delay(25);
       }
 
       yield {
         type: "tool-call",
-        toolCallType: "function",
         toolCallId: `call_1`,
         toolName: "str_replace_editor",
-        args: JSON.stringify({
+        input: JSON.stringify({
           command: "create",
           path: `/components/${componentName}.jsx`,
           file_text: this.getComponentCode(componentType),
@@ -96,10 +97,10 @@ export class MockLanguageModel implements LanguageModelV1 {
 
       yield {
         type: "finish",
-        finishReason: "tool-calls",
+        finishReason: { unified: "tool-calls", raw: "tool-calls" },
         usage: {
-          promptTokens: 50,
-          completionTokens: 30,
+          inputTokens: { total: 50, noCache: 50, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 30, text: 30, reasoning: 0 },
         },
       };
       return;
@@ -109,16 +110,15 @@ export class MockLanguageModel implements LanguageModelV1 {
     if (toolMessageCount === 2) {
       const text = `Now let me enhance the component with better styling.`;
       for (const char of text) {
-        yield { type: "text-delta", textDelta: char };
+        yield { type: "text-delta", id: "msg", delta: char };
         await this.delay(25);
       }
 
       yield {
         type: "tool-call",
-        toolCallType: "function",
         toolCallId: `call_2`,
         toolName: "str_replace_editor",
-        args: JSON.stringify({
+        input: JSON.stringify({
           command: "str_replace",
           path: `/components/${componentName}.jsx`,
           old_str: this.getOldStringForReplace(componentType),
@@ -128,10 +128,10 @@ export class MockLanguageModel implements LanguageModelV1 {
 
       yield {
         type: "finish",
-        finishReason: "tool-calls",
+        finishReason: { unified: "tool-calls", raw: "tool-calls" },
         usage: {
-          promptTokens: 50,
-          completionTokens: 30,
+          inputTokens: { total: 50, noCache: 50, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 30, text: 30, reasoning: 0 },
         },
       };
       return;
@@ -141,16 +141,15 @@ export class MockLanguageModel implements LanguageModelV1 {
     if (toolMessageCount === 0) {
       const text = `This is a static response. You can place an Anthropic API key in the .env file to use the Anthropic API for component generation. Let me create an App.jsx file to display the component.`;
       for (const char of text) {
-        yield { type: "text-delta", textDelta: char };
+        yield { type: "text-delta", id: "msg", delta: char };
         await this.delay(15);
       }
 
       yield {
         type: "tool-call",
-        toolCallType: "function",
         toolCallId: `call_3`,
         toolName: "str_replace_editor",
-        args: JSON.stringify({
+        input: JSON.stringify({
           command: "create",
           path: "/App.jsx",
           file_text: this.getAppCode(componentName),
@@ -159,10 +158,10 @@ export class MockLanguageModel implements LanguageModelV1 {
 
       yield {
         type: "finish",
-        finishReason: "tool-calls",
+        finishReason: { unified: "tool-calls", raw: "tool-calls" },
         usage: {
-          promptTokens: 50,
-          completionTokens: 30,
+          inputTokens: { total: 50, noCache: 50, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 30, text: 30, reasoning: 0 },
         },
       };
       return;
@@ -178,16 +177,16 @@ export class MockLanguageModel implements LanguageModelV1 {
 The component is now ready to use. You can see the preview on the right side of the screen.`;
 
       for (const char of text) {
-        yield { type: "text-delta", textDelta: char };
+        yield { type: "text-delta", id: "msg", delta: char };
         await this.delay(30);
       }
 
       yield {
         type: "finish",
-        finishReason: "stop",
+        finishReason: { unified: "stop", raw: "stop" },
         usage: {
-          promptTokens: 50,
-          completionTokens: 50,
+          inputTokens: { total: 50, noCache: 50, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 50, text: 50, reasoning: 0 },
         },
       };
       return;
@@ -423,12 +422,12 @@ export default function App() {
   }
 
   async doGenerate(
-    options: Parameters<LanguageModelV1["doGenerate"]>[0]
-  ): Promise<Awaited<ReturnType<LanguageModelV1["doGenerate"]>>> {
+    options: LanguageModelV3CallOptions
+  ): Promise<any> {
     const userPrompt = this.extractUserPrompt(options.prompt);
 
     // Collect all stream parts
-    const parts: LanguageModelV1StreamPart[] = [];
+    const parts: LanguageModelV3StreamPart[] = [];
     for await (const part of this.generateMockStream(
       options.prompt,
       userPrompt
@@ -439,35 +438,35 @@ export default function App() {
     // Build response from parts
     const textParts = parts
       .filter((p) => p.type === "text-delta")
-      .map((p) => (p as any).textDelta)
+      .map((p) => (p as any).delta)
       .join("");
 
     const toolCalls = parts
       .filter((p) => p.type === "tool-call")
       .map((p) => ({
-        toolCallType: "function" as const,
+        type: "tool-call" as const,
         toolCallId: (p as any).toolCallId,
         toolName: (p as any).toolName,
-        args: (p as any).args,
+        input: (p as any).input,
       }));
 
     // Get finish reason from finish part
     const finishPart = parts.find((p) => p.type === "finish") as any;
-    const finishReason = finishPart?.finishReason || "stop";
+    const finishReason = finishPart?.finishReason || { unified: "stop", raw: "stop" };
 
     return {
       text: textParts,
       toolCalls,
-      finishReason: finishReason as any,
+      finishReason,
       usage: {
-        promptTokens: 100,
-        completionTokens: 200,
+        inputTokens: { total: 100, noCache: 100, cacheRead: 0, cacheWrite: 0 },
+        outputTokens: { total: 200, text: 200, reasoning: 0 },
       },
       warnings: [],
       rawCall: {
         rawPrompt: options.prompt,
         rawSettings: {
-          maxTokens: options.maxTokens,
+          maxOutputTokens: options.maxOutputTokens,
           temperature: options.temperature,
         },
       },
@@ -475,12 +474,12 @@ export default function App() {
   }
 
   async doStream(
-    options: Parameters<LanguageModelV1["doStream"]>[0]
-  ): Promise<Awaited<ReturnType<LanguageModelV1["doStream"]>>> {
+    options: LanguageModelV3CallOptions
+  ): Promise<any> {
     const userPrompt = this.extractUserPrompt(options.prompt);
     const self = this;
 
-    const stream = new ReadableStream<LanguageModelV1StreamPart>({
+    const stream = new ReadableStream<LanguageModelV3StreamPart>({
       async start(controller) {
         try {
           const generator = self.generateMockStream(options.prompt, userPrompt);

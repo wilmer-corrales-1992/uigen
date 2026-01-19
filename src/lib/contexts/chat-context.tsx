@@ -5,19 +5,20 @@ import {
   useContext,
   ReactNode,
   useEffect,
+  useState,
 } from "react";
 import { useChat as useAIChat } from "@ai-sdk/react";
-import { Message } from "ai";
+import { UIMessage } from "ai";
 import { useFileSystem } from "./file-system-context";
 import { setHasAnonWork } from "@/lib/anon-work-tracker";
 
 interface ChatContextProps {
   projectId?: string;
-  initialMessages?: Message[];
+  initialMessages?: UIMessage[];
 }
 
 interface ChatContextType {
-  messages: Message[];
+  messages: UIMessage[];
   input: string;
   handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
@@ -32,24 +33,55 @@ export function ChatProvider({
   initialMessages = [],
 }: ChatContextProps & { children: ReactNode }) {
   const { fileSystem, handleToolCall } = useFileSystem();
+  const [input, setInput] = useState("");
 
-  const {
-    messages,
-    input,
-    handleInputChange,
-    handleSubmit,
-    status,
-  } = useAIChat({
-    api: "/api/chat",
-    initialMessages,
-    body: {
-      files: fileSystem.serialize(),
-      projectId,
-    },
+  const chat = useAIChat({
+    messages: initialMessages,
+    sendAutomaticallyWhen: () => false,
+    transport: {
+      sendMessages: async (options: any) => {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: options.messages,
+            files: fileSystem.serialize(),
+            projectId,
+          }),
+        });
+
+        if (!response.ok || !response.body) {
+          throw new Error("Failed to fetch");
+        }
+
+        return response.body as any;
+      },
+
+      reconnectToStream: async () => {
+        throw new Error("Not implemented");
+      },
+    } as any,
     onToolCall: ({ toolCall }) => {
-      handleToolCall(toolCall);
+      handleToolCall(toolCall as any);
     },
   });
+
+  const { messages, sendMessage, status } = chat;
+
+  // Create wrapper functions for backwards compatibility
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+  };
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+
+    await sendMessage({ text: input });
+    setInput("");
+  };
 
   // Track anonymous work
   useEffect(() => {

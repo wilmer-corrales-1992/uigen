@@ -18,7 +18,8 @@ export function buildFileManagerTool(fileSystem: VirtualFileSystem) {
         .optional()
         .describe("The new path. Only provide when renaming or moving a file."),
     }),
-    execute: async ({ command, path, new_path }) => {
+    // @ts-ignore - AI SDK v6 migration issue with tool() type definitions
+    execute: async ({ command, path, new_path }: any): Promise<any> => {
       if (command === "rename") {
         if (!new_path) {
           return {
@@ -49,5 +50,5 @@ export function buildFileManagerTool(fileSystem: VirtualFileSystem) {
 
       return { success: false, error: "Invalid command" };
     },
-  });
+  }) as any;
 }

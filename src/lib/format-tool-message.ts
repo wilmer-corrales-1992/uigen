@@ -32,7 +32,7 @@ const TOOL_MESSAGE_CONFIG: Record<
   string,
   Record<
     string,
-    (args: StrReplaceEditorArgs | FileManagerArgs, isComplete: boolean) => string
+    (args: any, isComplete: boolean) => string
   >
 > = {
   str_replace_editor: {
